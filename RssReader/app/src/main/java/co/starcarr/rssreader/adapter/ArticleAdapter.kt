@@ -7,19 +7,14 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import co.starcarr.rssreader.R
 import co.starcarr.rssreader.model.Article
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 
 interface ArticleLoader {
     suspend fun loadMore()
 }
 
-class ArticleAdapter(
-    private val loader: ArticleLoader
-) : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
+class ArticleAdapter : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
 
     private val articles: MutableList<Article> = mutableListOf()
-    private var loading = false
 
     class ViewHolder(
         val layout: LinearLayout,
@@ -49,16 +44,6 @@ class ArticleAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val article = articles[position]
 
-        // request more articles when needed
-        if (!loading && position >= articles.size - 2) {
-            loading = true
-
-            GlobalScope.launch {
-                loader.loadMore()
-                loading = false
-            }
-        }
-
         holder.feed.text = article.feed
         holder.title.text = article.title
         holder.summary.text = article.summary
@@ -68,5 +53,16 @@ class ArticleAdapter(
         this.articles.addAll(articles)
         notifyDataSetChanged()
     }
+
+    fun add(article: Article) {
+        this.articles.add(article)
+        notifyDataSetChanged()
+    }
+
+    fun clear() {
+        this.articles.clear()
+        notifyDataSetChanged()
+    }
+
 
 }

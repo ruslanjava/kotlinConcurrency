@@ -1,48 +1,49 @@
 package co.starcarr.rssreader
 
 import android.os.Bundle
-import android.util.Log
-import android.view.View
-import android.widget.ProgressBar
+import android.widget.Button
+import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.RecyclerView
 import co.starcarr.rssreader.adapter.ArticleAdapter
-import co.starcarr.rssreader.adapter.ArticleLoader
-import co.starcarr.rssreader.producer.ArticleProducer
+import co.starcarr.rssreader.search.Searcher
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity(), ArticleLoader {
+class SearchActivity : AppCompatActivity() {
+    private val searcher = Searcher()
 
     private lateinit var articles: RecyclerView
     private lateinit var viewAdapter: ArticleAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_search)
 
         viewAdapter = ArticleAdapter()
         articles = findViewById<RecyclerView>(R.id.articles).apply {
             adapter = viewAdapter
         }
 
-        GlobalScope.launch {
-            loadMore()
+        findViewById<Button>(R.id.searchButton).setOnClickListener {
+            viewAdapter.clear()
+            GlobalScope.launch {
+                search()
+            }
         }
-
     }
 
-    override suspend fun loadMore() {
-        val producer = ArticleProducer.producer
+    private suspend fun search() {
+        val query = findViewById<EditText>(R.id.searchText).text.toString()
 
-        if (!producer.isClosedForReceive) {
-            val articles = producer.receive()
+        val channel = searcher.search(query)
+
+        while (!channel.isClosedForReceive) {
+            val article = channel.receive()
 
             MainScope().launch {
-                findViewById<ProgressBar>(R.id.progressBar).visibility = View.GONE
-                viewAdapter.add(articles)
-                Log.d("Main", "Currently has ${viewAdapter.itemCount} articles")
+                viewAdapter.add(article)
             }
         }
     }

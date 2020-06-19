@@ -10,7 +10,15 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 class MainActivity : AppCompatActivity() {
 
-    private val defDsp = newSingleThreadContext(name = "ServiceCall")
+    private val feeds = listOf(
+            "https://www.npr.org/rss/rss.php?id=1001",
+            "http://rss.cnn.com/rss/cnn_topstories.rss",
+            "http://feeds.foxnews.com/foxnews/politics?format=xml",
+            "htt:myNewsFeed"
+    )
+
+    @ObsoleteCoroutinesApi
+    private val dispatcher = newFixedThreadPoolContext(2, "IO")
     private val factory = DocumentBuilderFactory.newInstance()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,30 +28,52 @@ class MainActivity : AppCompatActivity() {
         asyncLoadNews()
     }
 
-    private fun asyncLoadNews(dispatcher: CoroutineDispatcher = defDsp) = GlobalScope.launch(dispatcher) {
-        val headlines = fetchRssHeadlines()
+    @ExperimentalCoroutinesApi
+    private fun asyncLoadNews() = GlobalScope.launch {
+        val requests = mutableListOf<Deferred<List<String>>>()
+
+        feeds.mapTo(requests) {
+            asyncFetchHeadlines(it, dispatcher)
+        }
+
+        requests.forEach {
+            it.join()
+        }
+
+        // If the code below crashes, please change the filter
+        // to !it.isCompletedExceptionally until this issue is
+        // closed: https://github.com/Kotlin/kotlinx.coroutines/issues/220
+        val headlines = requests
+                .filter { !it.isCancelled }
+                .flatMap { it.await() }
+
+        // If the counter doesn't work, please change the filter
+        // to it.isCompletedExceptionally until this issues is
+        // closed: https://github.com/Kotlin/kotlinx.coroutines/issues/220
+        val failed = requests
+                .filter { it.isCancelled }
+                .size
+
         val newsCount = findViewById<TextView>(R.id.newsCount)
+        val warnings = findViewById<TextView>(R.id.warnings)
+        val obtained = requests.size - failed
 
         MainScope().launch {
-            newsCount.text = "Found ${headlines.size} News"
+            newsCount.text = "Found ${headlines.size} News in $obtained feeds"
+            if (failed > 0) {
+                warnings.text = "Failed to fetch $failed feeds"
+            }
         }
     }
 
-    private fun loadNews() {
-        val headlines = fetchRssHeadlines()
-        val newsCount = findViewById<TextView>(R.id.newsCount)
 
-        MainScope().launch {
-            newsCount.text = "Found ${headlines.size} News"
-        }
-    }
-
-    private fun fetchRssHeadlines(): List<String> {
+    private fun asyncFetchHeadlines(feed: String,
+            dispatcher: CoroutineDispatcher) = GlobalScope.async(dispatcher) {
         val builder = factory.newDocumentBuilder()
-        val xml = builder.parse("https://www.npr.org/rss/rss.php?id=1001")
+        val xml = builder.parse(feed)
         val news = xml.getElementsByTagName("channel").item(0)
 
-        return (0 until news.childNodes.length)
+        (0 until news.childNodes.length)
                 .map { news.childNodes.item(it) }
                 .filter { Node.ELEMENT_NODE == it.nodeType }
                 .map { it as Element }

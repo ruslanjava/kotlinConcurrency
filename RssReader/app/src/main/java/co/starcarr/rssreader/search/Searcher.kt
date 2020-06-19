@@ -68,6 +68,9 @@ class Searcher {
 
                     val article = Article(feed.name, title, summary)
                     channel.send(article)
+
+                    // Increment the singleton with the counter
+                    ResultsCounter.increment()
                 }
             }
 

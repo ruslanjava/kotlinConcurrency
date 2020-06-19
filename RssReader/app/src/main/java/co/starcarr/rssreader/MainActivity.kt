@@ -1,8 +1,13 @@
 package co.starcarr.rssreader
 
 import android.os.Bundle
-import android.widget.TextView
+import android.view.View
+import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.RecyclerView
+import co.starcarr.rssreader.adapter.ArticleAdapter
+import co.starcarr.rssreader.model.Article
+import co.starcarr.rssreader.model.Feed
 import kotlinx.coroutines.*
 import org.w3c.dom.Element
 import org.w3c.dom.Node
@@ -11,29 +16,36 @@ import javax.xml.parsers.DocumentBuilderFactory
 class MainActivity : AppCompatActivity() {
 
     private val feeds = listOf(
-            "https://www.npr.org/rss/rss.php?id=1001",
-            "http://rss.cnn.com/rss/cnn_topstories.rss",
-            "http://feeds.foxnews.com/foxnews/politics?format=xml",
-            "htt:myNewsFeed"
+            Feed("npr", "https://www.npr.org/rss/rss.php?id=1001"),
+            Feed("cnn", "http://rss.cnn.com/rss/cnn_topstories.rss"),
+            Feed("fox", "http://feeds.foxnews.com/foxnews/latest?format=xml"),
+            Feed("inv", "htt:myNewsFeed")
     )
 
     @ObsoleteCoroutinesApi
     private val dispatcher = newFixedThreadPoolContext(2, "IO")
     private val factory = DocumentBuilderFactory.newInstance()
 
+    private lateinit var articles: RecyclerView
+    private lateinit var viewAdapter: ArticleAdapter
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        viewAdapter = ArticleAdapter()
+        articles = findViewById<RecyclerView>(R.id.articles).apply {
+            adapter = viewAdapter
+        }
+
         asyncLoadNews()
     }
 
-    @ExperimentalCoroutinesApi
     private fun asyncLoadNews() = GlobalScope.launch {
-        val requests = mutableListOf<Deferred<List<String>>>()
+        val requests = mutableListOf<Deferred<List<Article>>>()
 
         feeds.mapTo(requests) {
-            asyncFetchHeadlines(it, dispatcher)
+            asyncFetchArticles(it, dispatcher)
         }
 
         requests.forEach {
@@ -43,7 +55,7 @@ class MainActivity : AppCompatActivity() {
         // If the code below crashes, please change the filter
         // to !it.isCompletedExceptionally until this issue is
         // closed: https://github.com/Kotlin/kotlinx.coroutines/issues/220
-        val headlines = requests
+        val articles = requests
                 .filter { !it.isCancelled }
                 .flatMap { it.await() }
 
@@ -54,23 +66,19 @@ class MainActivity : AppCompatActivity() {
                 .filter { it.isCancelled }
                 .size
 
-        val newsCount = findViewById<TextView>(R.id.newsCount)
-        val warnings = findViewById<TextView>(R.id.warnings)
         val obtained = requests.size - failed
 
         MainScope().launch {
-            newsCount.text = "Found ${headlines.size} News in $obtained feeds"
-            if (failed > 0) {
-                warnings.text = "Failed to fetch $failed feeds"
-            }
+            findViewById<ProgressBar>(R.id.progressBar).visibility = View.GONE
+            viewAdapter.add(articles)
         }
     }
 
 
-    private fun asyncFetchHeadlines(feed: String,
-            dispatcher: CoroutineDispatcher) = GlobalScope.async(dispatcher) {
+    private fun asyncFetchArticles(feed: Feed, dispatcher: CoroutineDispatcher) = GlobalScope.async(dispatcher) {
+        delay(1500)
         val builder = factory.newDocumentBuilder()
-        val xml = builder.parse(feed)
+        val xml = builder.parse(feed.url)
         val news = xml.getElementsByTagName("channel").item(0)
 
         (0 until news.childNodes.length)
@@ -79,7 +87,20 @@ class MainActivity : AppCompatActivity() {
                 .map { it as Element }
                 .filter { "item" == it.tagName }
                 .map {
-                    it.getElementsByTagName("title").item(0).textContent
+                    val title = it.getElementsByTagName("title")
+                            .item(0)
+                            .textContent
+                    var summary = it.getElementsByTagName("description")
+                            .item(0)
+                            .textContent
+
+                    if (!summary.startsWith("<div")
+                            && summary.contains("<div")) {
+                        summary = summary.substring(0, summary.indexOf("<div"))
+                    }
+
+
+                    Article(feed.name, title, summary)
                 }
     }
 

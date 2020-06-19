@@ -1,10 +1,9 @@
 package co.starcarr.rssreader
 
-import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.TextView
-import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.android.UI
+import androidx.appcompat.app.AppCompatActivity
+import kotlinx.coroutines.*
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import javax.xml.parsers.DocumentBuilderFactory
@@ -21,11 +20,11 @@ class MainActivity : AppCompatActivity() {
         asyncLoadNews()
     }
 
-    private fun asyncLoadNews(dispatcher: CoroutineDispatcher = defDsp) = launch(dispatcher) {
+    private fun asyncLoadNews(dispatcher: CoroutineDispatcher = defDsp) = GlobalScope.launch(dispatcher) {
         val headlines = fetchRssHeadlines()
         val newsCount = findViewById<TextView>(R.id.newsCount)
 
-        launch(UI) {
+        MainScope().launch {
             newsCount.text = "Found ${headlines.size} News"
         }
     }
@@ -34,11 +33,10 @@ class MainActivity : AppCompatActivity() {
         val headlines = fetchRssHeadlines()
         val newsCount = findViewById<TextView>(R.id.newsCount)
 
-        launch(UI) {
+        MainScope().launch {
             newsCount.text = "Found ${headlines.size} News"
         }
     }
-
 
     private fun fetchRssHeadlines(): List<String> {
         val builder = factory.newDocumentBuilder()

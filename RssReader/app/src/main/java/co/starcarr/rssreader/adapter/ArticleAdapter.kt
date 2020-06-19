@@ -7,22 +7,33 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import co.starcarr.rssreader.R
 import co.starcarr.rssreader.model.Article
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
-class ArticleAdapter : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
+interface ArticleLoader {
+    suspend fun loadMore()
+}
+
+class ArticleAdapter(
+    private val loader: ArticleLoader
+) : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
 
     private val articles: MutableList<Article> = mutableListOf()
+    private var loading = false
 
     class ViewHolder(
-            val layout: LinearLayout,
-            val feed: TextView,
-            val title: TextView,
-            val summary: TextView
+        val layout: LinearLayout,
+        val feed: TextView,
+        val title: TextView,
+        val summary: TextView
     ) : RecyclerView.ViewHolder(layout)
 
-    override fun onCreateViewHolder(parent: ViewGroup,
-                                    viewType: Int): ViewHolder {
+    override fun onCreateViewHolder(
+        parent: ViewGroup,
+        viewType: Int
+    ): ViewHolder {
         val layout = LayoutInflater.from(parent.context)
-                .inflate(R.layout.article, parent, false) as LinearLayout
+            .inflate(R.layout.article, parent, false) as LinearLayout
 
         val feed = layout.findViewById<TextView>(R.id.feed)
         val title = layout.findViewById<TextView>(R.id.title)
@@ -31,10 +42,22 @@ class ArticleAdapter : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
         return ViewHolder(layout, feed, title, summary)
     }
 
-    override fun getItemCount() = articles.size
+    override fun getItemCount(): Int {
+        return articles.size
+    }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val article = articles[position]
+
+        // request more articles when needed
+        if (!loading && position >= articles.size - 2) {
+            loading = true
+
+            GlobalScope.launch {
+                loader.loadMore()
+                loading = false
+            }
+        }
 
         holder.feed.text = article.feed
         holder.title.text = article.title
@@ -45,6 +68,5 @@ class ArticleAdapter : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
         this.articles.addAll(articles)
         notifyDataSetChanged()
     }
-
 
 }
